@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "SugarLog",
+    "slug": "sugarlog",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#FFFFFF",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sugarlog.app"
+    },
+    "android": {
+      "package": "com.sugarlog.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B9D"
+      }
+    },
+    "scheme": "sugarlog",
+    "plugins": [
+      "expo-router",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/icon.png",
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "820c0e1f-0055-4cfc-bcb7-00b3da3afa6c"
+      }
+    },
+    "owner": "marcusthegreat"
+  }
+}
