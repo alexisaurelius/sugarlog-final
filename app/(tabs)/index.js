@@ -22,10 +22,10 @@ import { UNIT_SYSTEMS, COMMON_ITEMS, formatValue, getUnitLabel, convertToMetric 
 import { getLocalizedFoodItems } from '../../utils/unitsLocalized';
 import { updateStreakAndSuccess, releaseFreezeForDate, getDaysWithEntriesSet } from '../../utils/stats';
 import { isSubscribed, presentPaywall } from '../../utils/purchases';
+import { maybePromptReview } from '../../utils/appReview';
 import { useTheme } from '../../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
-
-const FREE_DAY_LIMIT = 3;
+import { DEFAULTS, LIMITS, SUBSCRIPTION } from '../../app.config';
 
 export default function TrackScreen() {
   const theme = useTheme();
@@ -36,7 +36,7 @@ export default function TrackScreen() {
   const [customAmount, setCustomAmount] = useState('');
   const [customFoodName, setCustomFoodName] = useState('');
   const [todayIntake, setTodayIntake] = useState(0);
-  const [dailyGoal, setDailyGoal] = useState(10);
+  const [dailyGoal, setDailyGoal] = useState(DEFAULTS.dailyGoalGrams);
   const [unitSystem, setUnitSystem] = useState(UNIT_SYSTEMS.METRIC);
   const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [showGoalInput, setShowGoalInput] = useState(false);
@@ -51,8 +51,9 @@ export default function TrackScreen() {
   const [newCustomName, setNewCustomName] = useState('');
   const [newCustomAmount, setNewCustomAmount] = useState('');
   const [quitReasons, setQuitReasons] = useState([]);
+  const [userName, setUserName] = useState('');
 
-  const MAX_CUSTOM_QUICK_ADD = 20;
+  const MAX_CUSTOM_QUICK_ADD = LIMITS.maxCustomQuickAddItems;
 
   function dayOfYear(d) {
     const start = new Date(d.getFullYear(), 0, 0);
@@ -89,7 +90,7 @@ export default function TrackScreen() {
     try {
       const dateKey = selectedDate.toDateString();
       const intake = await getStorageItem(`intake_${dateKey}`, '0');
-      const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10');
+      const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams));
       const unit = await getStorageItem(STORAGE_KEYS.UNIT_SYSTEM, UNIT_SYSTEMS.METRIC);
       
       // Load entry history
@@ -117,6 +118,9 @@ export default function TrackScreen() {
         if (!Array.isArray(reasons)) reasons = [];
       } catch (_) {}
       setQuitReasons(reasons);
+
+      const name = await getStorageItem(STORAGE_KEYS.USER_NAME, '');
+      setUserName(typeof name === 'string' ? name.trim() : '');
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -163,8 +167,8 @@ export default function TrackScreen() {
 
     const goalInGrams = goalValue;
 
-    const MAX_GOAL_GRAMS = 50;
-    if (goalInGrams > MAX_GOAL_GRAMS) {
+const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
+  if (goalInGrams > MAX_GOAL_GRAMS) {
       Alert.alert(
         t('track.maximumLimitExceeded'),
         `${t('track.maxDailyGoal')} ${MAX_GOAL_GRAMS}g ${t('track.maxDailyGoalDesc')}`
@@ -183,13 +187,17 @@ export default function TrackScreen() {
   const addSugar = async (amount, itemName = 'Custom') => {
     try {
       const dateKey = selectedDate.toDateString();
-      const subscribed = await isSubscribed();
+      let subscribed = await isSubscribed();
       if (!subscribed) {
         const daysWithEntries = await getDaysWithEntriesSet();
         const alreadyHasThisDay = daysWithEntries.has(dateKey);
-        if (!alreadyHasThisDay && daysWithEntries.size >= FREE_DAY_LIMIT) {
-          const purchased = await presentPaywall();
-          if (!purchased) return;
+        if (!alreadyHasThisDay && daysWithEntries.size >= SUBSCRIPTION.freeDayLimit) {
+          // Force refresh so paid users don't see paywall again (RevenueCat cache can be stale)
+          subscribed = await isSubscribed(true);
+          if (!subscribed) {
+            const purchased = await presentPaywall();
+            if (!purchased) return;
+          }
         }
       }
 
@@ -227,6 +235,7 @@ export default function TrackScreen() {
         await updateStreakAndSuccess(newIntake, dailyGoal);
       }
 
+      maybePromptReview(selectedDate);
       setCustomAmount('');
     } catch (error) {
       console.error('Error adding sugar:', error);
@@ -297,17 +306,20 @@ export default function TrackScreen() {
           text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
+            setShowHistoryModal(false);
+
             const dateKey = selectedDate.toDateString();
             const historyKey = `entries_${dateKey}`;
             const updatedHistory = entryHistory.filter(e => e.id !== entryId);
-            
-            const newIntake = Math.max(0, todayIntake - entry.amount);
+
+            const entryGrams = entry.amount ?? entry.sugarGrams ?? 0;
+            const newIntake = Math.max(0, todayIntake - entryGrams);
             setTodayIntake(newIntake);
             await setStorageItem(`intake_${dateKey}`, newIntake.toString());
             await setStorageItem(historyKey, JSON.stringify(updatedHistory));
             setEntryHistory(updatedHistory);
             await releaseFreezeForDate(dateKey);
-            
+
             const today = new Date().toDateString();
             if (dateKey === today) {
               await setStorageItem(STORAGE_KEYS.TODAY_INTAKE, newIntake.toString());
@@ -323,19 +335,21 @@ export default function TrackScreen() {
     const entry = entryHistory.find(e => e.id === entryId);
     if (!entry) return;
 
+    const entryGrams = entry.amount ?? entry.sugarGrams ?? 0;
+
     // Convert to grams for storage (always store in grams)
     const amountInGrams = unitSystem === UNIT_SYSTEMS.IMPERIAL 
       ? newDisplayAmount * 28.3495 
       : newDisplayAmount;
 
-    const difference = amountInGrams - entry.amount;
+    const difference = amountInGrams - entryGrams;
     const newIntake = todayIntake + difference;
     
     const dateKey = selectedDate.toDateString();
     const historyKey = `entries_${dateKey}`;
-    const updatedHistory = entryHistory.map(e => 
-      e.id === entryId 
-        ? { ...e, amount: amountInGrams, displayAmount: newDisplayAmount }
+    const updatedHistory = entryHistory.map(e =>
+      e.id === entryId
+        ? { ...e, amount: amountInGrams, displayAmount: newDisplayAmount, sugarGrams: undefined }
         : e
     );
     
@@ -350,6 +364,7 @@ export default function TrackScreen() {
       await setStorageItem(STORAGE_KEYS.TODAY_INTAKE, newIntake.toString());
       await updateStreakAndSuccess(newIntake, dailyGoal);
     }
+    maybePromptReview(selectedDate);
   };
 
   const resetToday = async () => {
@@ -404,7 +419,9 @@ export default function TrackScreen() {
         colors={c.gradient}
         style={[styles.fixedHeader, { paddingTop: insets.top + 5, height: insets.top + 95 }]}
       >
-        <Text style={styles.headerTitle}>{t('track.title')}</Text>
+        <Text style={styles.headerTitle}>
+          {userName ? t('track.greeting', { name: userName }) : t('track.title')}
+        </Text>
         <Text style={styles.headerSubtitle}>{t('track.subtitle')}</Text>
       </LinearGradient>
 
@@ -673,35 +690,41 @@ export default function TrackScreen() {
                   .slice()
                   .reverse()
                   .map((entry) => {
-                    // Use stored displayAmount if available, otherwise convert from grams
+                    // Use stored displayAmount if available, otherwise convert from grams (support legacy entry.amount / entry.sugarGrams)
+                    const grams = entry.amount ?? entry.sugarGrams ?? 0;
                     let displayAmount = entry.displayAmount;
-                    if (!displayAmount || displayAmount === undefined) {
+                    if (displayAmount == null || Number.isNaN(Number(displayAmount))) {
                       displayAmount = unitSystem === UNIT_SYSTEMS.IMPERIAL
-                        ? entry.amount * 0.035274
-                        : entry.amount;
+                        ? grams * 0.035274
+                        : grams;
                     }
-                    
-                    const time = new Date(entry.timestamp).toLocaleTimeString('en-US', {
+                    const safeDisplayNum = Number(displayAmount) || 0;
+
+                    const time = new Date(entry.timestamp || Date.now()).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
                     });
-                    
+                    const entryItemName = entry.itemName ?? entry.name ?? 'Custom';
+
                     return (
                       <View key={entry.id} style={styles.historyItem}>
                         <View style={styles.historyItemInfo}>
-                          <Text style={styles.historyItemName}>{entry.itemName}</Text>
+                          <Text style={styles.historyItemName}>{entryItemName}</Text>
                           <Text style={styles.historyItemTime}>{time}</Text>
                           <Text style={styles.historyItemAmount}>
-                            {formatValue(displayAmount, unitSystem, 1, t)}
+                            {formatValue(safeDisplayNum, unitSystem, 1, t)}
                           </Text>
                         </View>
                         <View style={styles.historyItemActions}>
                         <TouchableOpacity
                           style={styles.editButton}
                           onPress={() => {
-                            setEditingEntry(entry);
-                            setEditAmount(displayAmount.toFixed(1));
                             setShowHistoryModal(false);
+                            // Defer opening edit modal so the history modal can close first (avoids two modals open = crash)
+                            setTimeout(() => {
+                              setEditingEntry(entry);
+                              setEditAmount(safeDisplayNum.toFixed(1));
+                            }, 220);
                           }}
                         >
                           <Ionicons name="pencil" size={18} color={c.primary} />
@@ -731,48 +754,54 @@ export default function TrackScreen() {
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
-            onPress={() => { setEditingEntry(null); setEditAmount(''); }}
+            onPress={() => {
+              Keyboard.dismiss();
+              setEditingEntry(null);
+              setEditAmount('');
+            }}
           />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('track.editEntry')}</Text>
-            <Text style={styles.modalSubtitle}>
-              {editingEntry?.itemName}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder={`${t('track.enterAmount')} ${getUnitLabel(unitSystem, t)}`}
-              placeholderTextColor={c.placeholder}
-              keyboardType="decimal-pad"
-              value={editAmount}
-              onChangeText={setEditAmount}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: c.textMuted, marginRight: 10 }]}
-                onPress={() => {
-                  setEditingEntry(null);
-                  setEditAmount('');
-                }}
-              >
-                <Text style={styles.modalButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={() => {
-                  const newAmount = parseFloat(editAmount);
-                  if (!isNaN(newAmount) && newAmount > 0 && editingEntry) {
-                    editEntry(editingEntry.id, newAmount);
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('track.editEntry')}</Text>
+              <Text style={styles.modalSubtitle}>
+                {editingEntry?.itemName ?? editingEntry?.name ?? 'Custom'}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder={`${t('track.enterAmount')} ${getUnitLabel(unitSystem, t)}`}
+                placeholderTextColor={c.placeholder}
+                keyboardType="decimal-pad"
+                value={editAmount}
+                onChangeText={setEditAmount}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: c.textMuted, marginRight: 10 }]}
+                  onPress={() => {
                     setEditingEntry(null);
                     setEditAmount('');
-                  } else {
-                    Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
-                  }
-                }}
-              >
-                <Text style={styles.modalButtonText}>{t('common.save')}</Text>
-              </TouchableOpacity>
+                  }}
+                >
+                  <Text style={styles.modalButtonText}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={() => {
+                    const newAmount = parseFloat(editAmount);
+                    if (!isNaN(newAmount) && newAmount > 0 && editingEntry) {
+                      editEntry(editingEntry.id, newAmount);
+                      setEditingEntry(null);
+                      setEditAmount('');
+                    } else {
+                      Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
+                    }
+                  }}
+                >
+                  <Text style={styles.modalButtonText}>{t('common.save')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </View>
       </AnimatedModal>
 
@@ -1029,7 +1058,7 @@ function createTrackStyles(theme) {
     },
     summaryTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 },
     summaryTitle: { fontSize: 18, color: c.textSecondary },
-    motivationReason: { fontSize: 14, fontStyle: 'italic', marginBottom: 8, textAlign: 'center', width: '100%' },
+    motivationReason: { fontSize: 18, fontStyle: 'italic', marginBottom: 8, textAlign: 'center', width: '100%' },
     summaryAmount: { fontSize: 32, fontWeight: 'bold', color: c.text, marginBottom: 15 },
     summaryEmptyText: { textAlign: 'center', color: c.textMuted, fontSize: 16, marginTop: 4, marginBottom: 15 },
     progressBar: { width: '100%', height: 20, backgroundColor: c.border, borderRadius: 10, overflow: 'hidden', marginBottom: 10 },

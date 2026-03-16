@@ -23,14 +23,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useThemeContext } from '../../utils/ThemeContext';
 import { getThemeList, THEME_IDS } from '../../utils/themes';
 import { useTranslation } from 'react-i18next';
-import { changeLanguage } from '../../i18n/config';
+import { useLanguage } from '../../contexts/LanguageContext';
 import * as Linking from 'expo-linking';
-import * as Clipboard from 'expo-clipboard';
-import { isSubscribed, presentPaywall } from '../../utils/purchases';
+import { isSubscribed, presentPaywall, getSubscriptionManagementURL, restorePurchases } from '../../utils/purchases';
 import QuitReasonsScreen from '../quit-reasons';
+import { DEFAULTS, LIMITS } from '../../app.config';
 
 function dateFromTimeString(hhmm) {
-  const match = (hhmm || '20:00').match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
+  const match = (hhmm || DEFAULTS.defaultNotificationTime).match(/^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/);
   const h = match ? parseInt(match[1], 10) : 20;
   const m = match ? parseInt(match[2], 10) : 0;
   const d = new Date();
@@ -46,21 +46,21 @@ function timeStringFromDate(d) {
 
 export default function SettingsScreen() {
   const { theme, themeId, setTheme } = useThemeContext();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const { currentLanguage, changeLanguage, getLanguageName, supportedLanguages } = useLanguage();
   const scrollRef = React.useRef(null);
   useScrollToTop(scrollRef);
-  const [dailyGoal, setDailyGoal] = useState(10);
+  const [dailyGoal, setDailyGoal] = useState(DEFAULTS.dailyGoalGrams);
   const [unitSystem, setUnitSystem] = useState(UNIT_SYSTEMS.METRIC);
   const [goalInput, setGoalInput] = useState('');
   const [notificationEnabled, setNotificationEnabled] = useState(false);
-  const [notificationTimes, setNotificationTimes] = useState(['20:00']);
+  const [notificationTimes, setNotificationTimes] = useState([DEFAULTS.defaultNotificationTime]);
   const [weekStartDay, setWeekStartDay] = useState(0); // 0 = Sunday, 1 = Monday
   const [editingTimeIndex, setEditingTimeIndex] = useState(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timePickerValue, setTimePickerValue] = useState(() => new Date());
   const [showSugarInfoModal, setShowSugarInfoModal] = useState(false);
   const [goalSet, setGoalSet] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
   const [scrollViewHeight, setScrollViewHeight] = useState(0);
@@ -70,10 +70,7 @@ export default function SettingsScreen() {
   const [showQuitReasonsModal, setShowQuitReasonsModal] = useState(false);
   const [quitReasonsList, setQuitReasonsList] = useState([]);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-
-  const getLanguageName = (code) => ({ en: 'English', ja: '日本語', zh: '中文' }[code] || code);
-
-  const MAX_REMINDERS = 4;
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
     loadData();
@@ -86,17 +83,17 @@ export default function SettingsScreen() {
   );
 
   const loadData = async () => {
-    const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10');
+    const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams));
     const unit = await getStorageItem(STORAGE_KEYS.UNIT_SYSTEM, UNIT_SYSTEMS.METRIC);
     const notifEnabled = await getStorageItem(STORAGE_KEYS.NOTIFICATION_ENABLED, 'false');
     let timesJson = await getStorageItem(STORAGE_KEYS.NOTIFICATION_TIMES, '');
     if (!timesJson) {
-      const legacy = await getStorageItem(STORAGE_KEYS.NOTIFICATION_TIME, '20:00');
-      const arr = legacy ? [legacy] : ['20:00'];
+      const legacy = await getStorageItem(STORAGE_KEYS.NOTIFICATION_TIME, DEFAULTS.defaultNotificationTime);
+      const arr = legacy ? [legacy] : [DEFAULTS.defaultNotificationTime];
       timesJson = JSON.stringify(arr);
       await setStorageItem(STORAGE_KEYS.NOTIFICATION_TIMES, timesJson);
     }
-    let times = ['20:00'];
+    let times = [DEFAULTS.defaultNotificationTime];
     try {
       const parsed = JSON.parse(timesJson);
       if (Array.isArray(parsed) && parsed.length > 0) times = parsed;
@@ -116,8 +113,11 @@ export default function SettingsScreen() {
       : parseFloat(goal);
     setGoalInput(displayGoal.toFixed(1));
 
-    const subscribed = await isSubscribed();
+    const subscribed = await isSubscribed(true);
     setIsPremiumActive(subscribed);
+
+    const name = await getStorageItem(STORAGE_KEYS.USER_NAME, '');
+    setUserName(name || '');
 
     const reasonsJson = await getStorageItem(STORAGE_KEYS.QUIT_SUGAR_REASONS, '[]');
     let reasons = [];
@@ -130,15 +130,20 @@ export default function SettingsScreen() {
 
   const saveReminderTimes = async (nextTimes) => {
     const valid = nextTimes.filter((t) => /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(String(t).trim()));
-    const times = (valid.length > 0 ? valid : ['20:00']).slice().sort();
+    const times = (valid.length > 0 ? valid : [DEFAULTS.defaultNotificationTime]).slice().sort();
     setNotificationTimes(times);
     await setStorageItem(STORAGE_KEYS.NOTIFICATION_TIMES, JSON.stringify(times));
     if (notificationEnabled) await scheduleDailyNotifications(times);
   };
 
   const addReminder = async () => {
-    if (notificationTimes.length >= MAX_REMINDERS) return;
-    await saveReminderTimes([...notificationTimes, '12:00']);
+    if (notificationTimes.length >= LIMITS.maxReminders) return;
+    const newIndex = notificationTimes.length;
+    const defaultTime = '12:00';
+    await saveReminderTimes([...notificationTimes, defaultTime]);
+    setTimePickerValue(dateFromTimeString(defaultTime));
+    setEditingTimeIndex(newIndex);
+    setShowTimePicker(true);
   };
 
   const removeReminder = async (index) => {
@@ -166,11 +171,10 @@ export default function SettingsScreen() {
       : goalValue;
 
     // Maximum allowed is 50 grams
-    const MAX_GOAL_GRAMS = 50;
-    if (goalInGrams > MAX_GOAL_GRAMS) {
+    if (goalInGrams > LIMITS.maxDailyGoalGrams) {
       const maxInCurrentUnit = unitSystem === UNIT_SYSTEMS.IMPERIAL 
-        ? MAX_GOAL_GRAMS * 0.035274 
-        : MAX_GOAL_GRAMS;
+        ? LIMITS.maxDailyGoalGrams * 0.035274 
+        : LIMITS.maxDailyGoalGrams;
       Alert.alert(
         t('track.maximumLimitExceeded'), 
         `${t('track.maxDailyGoal')} ${maxInCurrentUnit.toFixed(2)}${getUnitLabel(unitSystem, t)} ${t('track.maxDailyGoalDesc')}`
@@ -272,7 +276,7 @@ export default function SettingsScreen() {
   };
 
   const handleSendFeedback = async () => {
-    const email = 'sugarlog@apps-that-care.com';
+    const email = 'contact@apps-that-care.com';
     const subject = encodeURIComponent('SugarLog Feedback');
     const mailtoUrl = `mailto:${email}?subject=${subject}`;
     
@@ -289,14 +293,15 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleShareApp = async () => {
-    // Placeholder - user will add app link later
-    const appLink = 'https://apps-that-care.com/sugarlog'; // Placeholder
+  const APP_STORE_REVIEW_URL = 'https://apps.apple.com/app/sugarlog-quit-sugar/id6758400714?action=write-review';
+
+  const handleReviewApp = async () => {
     try {
-      await Clipboard.setStringAsync(appLink);
-      Alert.alert(t('common.success'), t('settings.appLinkCopied'));
-    } catch (error) {
-      console.error('Error copying to clipboard:', error);
+      const can = await Linking.canOpenURL(APP_STORE_REVIEW_URL);
+      if (can) await Linking.openURL(APP_STORE_REVIEW_URL);
+      else Alert.alert(t('common.error'), t('settings.copyFailed'));
+    } catch (e) {
+      console.warn('Open review URL:', e?.message || e);
       Alert.alert(t('common.error'), t('settings.copyFailed'));
     }
   };
@@ -316,6 +321,7 @@ export default function SettingsScreen() {
               await setStorageItem(STORAGE_KEYS.REMINDER_SETUP_COMPLETED, 'false');
               await setStorageItem(STORAGE_KEYS.GOAL_SET, 'false');
               await setStorageItem(STORAGE_KEYS.QUIT_REASONS_SCREEN_SEEN, 'false');
+              await setStorageItem(STORAGE_KEYS.ONBOARDING_NAME_COMPLETED, 'false');
               Alert.alert(
                 t('common.success'),
                 t('settings.resetOnboardingSuccess') || 'Onboarding will be shown on next app restart',
@@ -374,6 +380,25 @@ export default function SettingsScreen() {
         scrollEventThrottle={16}
       >
         <View style={styles.content}>
+        {/* Name */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('settings.name')}</Text>
+          <TextInput
+            style={[styles.input, styles.nameInput, { borderColor: c.border, color: c.text }]}
+            placeholder={t('settings.yourNamePlaceholder')}
+            placeholderTextColor={c.textMuted}
+            value={userName}
+            onChangeText={setUserName}
+            onBlur={async () => {
+              const trimmed = (userName || '').trim();
+              setUserName(trimmed);
+              await setStorageItem(STORAGE_KEYS.USER_NAME, trimmed);
+            }}
+            maxLength={50}
+            autoCapitalize="words"
+          />
+        </View>
+
         {/* Subscription */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.subscription')}</Text>
@@ -390,9 +415,10 @@ export default function SettingsScreen() {
               ]} 
               onPress={async () => {
                 if (isPremiumActive) {
-                  const url = Platform.OS === 'ios'
-                    ? 'https://apps.apple.com/account/subscriptions'
-                    : 'https://play.google.com/store/account/subscriptions';
+                  const url = await getSubscriptionManagementURL()
+                    ?? (Platform.OS === 'ios'
+                      ? 'https://apps.apple.com/account/subscriptions'
+                      : 'https://play.google.com/store/account/subscriptions');
                   try {
                     const can = await Linking.canOpenURL(url);
                     if (can) await Linking.openURL(url);
@@ -426,6 +452,21 @@ export default function SettingsScreen() {
               {t('settings.tapToManageSubscription')}
             </Text>
           )}
+          <TouchableOpacity
+            style={[styles.unitButton, { marginTop: 12 }]}
+            onPress={async () => {
+              const { restored } = await restorePurchases();
+              setIsPremiumActive(await isSubscribed(true));
+              Alert.alert(
+                t('settings.restorePurchases'),
+                restored ? t('settings.restorePurchasesSuccess') : t('settings.restorePurchasesNone'),
+                [{ text: t('common.ok') }]
+              );
+            }}
+          >
+            <Ionicons name="refresh-outline" size={24} color={c.primary} />
+            <Text style={styles.unitButtonText}>{t('settings.restorePurchases')}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Daily Goal */}
@@ -630,17 +671,28 @@ export default function SettingsScreen() {
                 await setStorageItem(STORAGE_KEYS.NOTIFICATION_ENABLED, newValue.toString());
 
                 if (newValue) {
-                  const hasPermission = await requestPermissions();
-                  if (hasPermission) {
-                    await scheduleDailyNotifications(notificationTimes);
-                    Alert.alert(t('common.success'), t('settings.remindersEnabled'));
-                  } else {
+                  try {
+                    const hasPermission = await requestPermissions();
+                    if (hasPermission) {
+                      await scheduleDailyNotifications(notificationTimes);
+                      Alert.alert(t('common.success'), t('settings.remindersEnabled'));
+                    } else {
+                      setNotificationEnabled(false);
+                      await setStorageItem(STORAGE_KEYS.NOTIFICATION_ENABLED, 'false');
+                      Alert.alert(t('settings.permissionRequired'), t('settings.enableNotificationsSettings'));
+                    }
+                  } catch (err) {
                     setNotificationEnabled(false);
                     await setStorageItem(STORAGE_KEYS.NOTIFICATION_ENABLED, 'false');
-                    Alert.alert(t('settings.permissionRequired'), t('settings.enableNotificationsSettings'));
+                    console.error('Enable reminders error:', err);
+                    Alert.alert(t('common.error'), t('settings.enableNotificationsSettings'));
                   }
                 } else {
-                  await cancelAllNotifications();
+                  try {
+                    await cancelAllNotifications();
+                  } catch (err) {
+                    console.error('Cancel notifications error:', err);
+                  }
                 }
               }}
             >
@@ -680,12 +732,12 @@ export default function SettingsScreen() {
                 </View>
               ))}
               <TouchableOpacity
-                style={[styles.addReminderBtn, notificationTimes.length >= MAX_REMINDERS && styles.addReminderBtnDisabled]}
+                style={[styles.addReminderBtn, notificationTimes.length >= LIMITS.maxReminders && styles.addReminderBtnDisabled]}
                 onPress={addReminder}
-                disabled={notificationTimes.length >= MAX_REMINDERS}
+                disabled={notificationTimes.length >= LIMITS.maxReminders}
               >
-                <Ionicons name="add-circle-outline" size={22} color={notificationTimes.length >= MAX_REMINDERS ? c.disabled : c.primary} />
-                <Text style={[styles.addReminderText, notificationTimes.length >= MAX_REMINDERS && styles.addReminderTextDisabled]}>
+                <Ionicons name="add-circle-outline" size={22} color={notificationTimes.length >= LIMITS.maxReminders ? c.disabled : c.primary} />
+                <Text style={[styles.addReminderText, notificationTimes.length >= LIMITS.maxReminders && styles.addReminderTextDisabled]}>
                   {t('settings.addReminder')}
                 </Text>
               </TouchableOpacity>
@@ -762,21 +814,23 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Dev Only: Reset to Initial State */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('settings.devOnly')}</Text>
-          <Text style={styles.cardSubtitle}>
-            {t('settings.resetInitialStateDesc')}
-          </Text>
-          <TouchableOpacity style={styles.devButton} onPress={resetToInitialState}>
-            <Ionicons name="refresh" size={20} color={c.primary} />
-            <Text style={styles.devButtonText}>{t('settings.resetInitialState')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.devButton, { marginTop: 12 }]} onPress={resetOnboarding}>
-            <Ionicons name="refresh-circle" size={20} color={c.primary} />
-            <Text style={styles.devButtonText}>{t('settings.resetOnboarding')}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Dev Only: shown only in __DEV__ (e.g. npm run dev / dev client), hidden in App Store / production */}
+        {__DEV__ && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('settings.devOnly')}</Text>
+            <Text style={styles.cardSubtitle}>
+              {t('settings.resetInitialStateDesc')}
+            </Text>
+            <TouchableOpacity style={styles.devButton} onPress={resetToInitialState}>
+              <Ionicons name="refresh" size={20} color={c.primary} />
+              <Text style={styles.devButtonText}>{t('settings.resetInitialState')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.devButton, { marginTop: 12 }]} onPress={resetOnboarding}>
+              <Ionicons name="refresh-circle" size={20} color={c.primary} />
+              <Text style={styles.devButtonText}>{t('settings.resetOnboarding')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Support & Info */}
         <View style={styles.card}>
@@ -792,9 +846,9 @@ export default function SettingsScreen() {
               <Text style={styles.unitButtonText}>{t('settings.faq')}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.unitButton} onPress={handleShareApp}>
-              <Ionicons name="share-outline" size={24} color={c.primary} />
-              <Text style={styles.unitButtonText}>{t('settings.shareApp')}</Text>
+            <TouchableOpacity style={styles.unitButton} onPress={handleReviewApp}>
+              <Ionicons name="star-outline" size={24} color={c.primary} />
+              <Text style={styles.unitButtonText}>{t('settings.reviewApp')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1045,7 +1099,7 @@ export default function SettingsScreen() {
                 <Ionicons name="close" size={24} color={c.textSecondary} />
               </TouchableOpacity>
             </View>
-            {['en', 'ja', 'zh'].map((code) => (
+            {supportedLanguages.map(({ code }) => (
               <TouchableOpacity
                 key={code}
                 style={[
@@ -1055,7 +1109,6 @@ export default function SettingsScreen() {
                 ]}
                 onPress={async () => {
                   await changeLanguage(code);
-                  setCurrentLanguage(code);
                   setShowLanguageModal(false);
                 }}
               >

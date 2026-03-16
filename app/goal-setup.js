@@ -16,8 +16,7 @@ import { useThemeContext } from '../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { STORAGE_KEYS, getStorageItem, setStorageItem } from '../utils/storage';
 import { UNIT_SYSTEMS } from '../utils/units';
-
-const MAX_GOAL_GRAMS = 50;
+import { LIMITS } from '../app.config';
 
 export default function GoalSetupScreen({ onComplete }) {
   const { theme } = useThemeContext();
@@ -25,10 +24,6 @@ export default function GoalSetupScreen({ onComplete }) {
   const c = theme.colors;
   const [showGoalInput, setShowGoalInput] = useState(false);
   const [goalInput, setGoalInput] = useState('');
-  const [scrollPosition, setScrollPosition] = useState(0);
-  const [scrollContentHeight, setScrollContentHeight] = useState(0);
-  const [scrollViewHeight, setScrollViewHeight] = useState(0);
-  const sugarInfoScrollRef = React.useRef(null);
   const styles = React.useMemo(() => createGoalSetupStyles(theme), [theme]);
 
   const handleSetGoal = async () => {
@@ -38,10 +33,10 @@ export default function GoalSetupScreen({ onComplete }) {
       return;
     }
     const goalInGrams = goalValue;
-    if (goalInGrams > MAX_GOAL_GRAMS) {
+    if (goalInGrams > LIMITS.maxDailyGoalGrams) {
       Alert.alert(
         t('track.maximumLimitExceeded'),
-        `${t('track.maxDailyGoal')} ${MAX_GOAL_GRAMS}g ${t('track.maxDailyGoalDesc')}`
+        `${t('track.maxDailyGoal')} ${LIMITS.maxDailyGoalGrams}g ${t('track.maxDailyGoalDesc')}`
       );
       return;
     }
@@ -56,19 +51,9 @@ export default function GoalSetupScreen({ onComplete }) {
       <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top', 'bottom']}>
         <View style={styles.sugarInfoScrollContainer}>
           <ScrollView
-            ref={sugarInfoScrollRef}
             style={styles.sugarInfoScrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            onScroll={(e) => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              setScrollPosition(contentOffset.y);
-              setScrollContentHeight(contentSize.height);
-              setScrollViewHeight(layoutMeasurement.height);
-            }}
-            onContentSizeChange={(_, height) => setScrollContentHeight(height)}
-            onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
-            scrollEventThrottle={16}
           >
           <View style={styles.content}>
             <Text style={styles.title}>{t('track.sugarIntake')}</Text>
@@ -126,22 +111,6 @@ export default function GoalSetupScreen({ onComplete }) {
             </View>
           </View>
           </ScrollView>
-          {scrollContentHeight > scrollViewHeight && (
-            <View style={[styles.scrollbarTrack, { backgroundColor: c.border }]}>
-              <View
-                style={[
-                  styles.scrollbarThumb,
-                  {
-                    backgroundColor: c.textMuted,
-                    height: Math.max(30, (scrollViewHeight / scrollContentHeight) * (scrollViewHeight - 10)),
-                    top: scrollContentHeight > scrollViewHeight
-                      ? (scrollPosition / (scrollContentHeight - scrollViewHeight)) * (scrollViewHeight - Math.max(30, (scrollViewHeight / scrollContentHeight) * (scrollViewHeight - 10)) - 10)
-                      : 0,
-                  },
-                ]}
-              />
-            </View>
-          )}
         </View>
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -198,23 +167,7 @@ function createGoalSetupStyles(theme) {
     scrollView: { flex: 1 },
     sugarInfoScrollContainer: { flex: 1, flexDirection: 'row' },
     sugarInfoScrollView: { flex: 1 },
-    scrollContent: { paddingBottom: 24, paddingRight: 20 },
-    scrollbarTrack: {
-      width: 6,
-      borderRadius: 3,
-      marginLeft: 8,
-      marginTop: 5,
-      marginBottom: 5,
-      position: 'relative',
-      minHeight: 100,
-    },
-    scrollbarThumb: {
-      width: 6,
-      borderRadius: 3,
-      minHeight: 30,
-      position: 'absolute',
-      top: 0,
-    },
+    scrollContent: { paddingBottom: 12, paddingRight: 20 },
     content: { paddingHorizontal: 24, paddingTop: 24 },
     title: { fontSize: 24, fontWeight: 'bold', color: c.text, marginBottom: 20, textAlign: 'center' },
     introText: { fontSize: 16, color: c.text, lineHeight: 24, marginBottom: 25 },
@@ -231,10 +184,10 @@ function createGoalSetupStyles(theme) {
     warningText: { fontSize: 16, color: c.text, fontStyle: 'italic', marginTop: 8, lineHeight: 24 },
     noteTitle: { fontSize: 18, fontWeight: 'bold', color: c.text, marginBottom: 10 },
     noteText: { fontSize: 16, color: c.textSecondary, lineHeight: 24 },
-    buttonContainer: { paddingHorizontal: 24, paddingVertical: 24, paddingBottom: 32 },
+    buttonContainer: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 16 },
     goalInputScreen: { flex: 1, paddingHorizontal: 24 },
     goalInputForm: { paddingTop: 24 },
-    primaryButton: { borderRadius: 12, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+    primaryButton: { borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
     primaryButtonText: { color: c.surface, fontSize: 18, fontWeight: 'bold' },
     inputSection: { marginTop: 16 },
     inputLabel: { fontSize: 18, fontWeight: 'bold', color: c.text, marginBottom: 8 },

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS, getStorageItem, setStorageItem } from './storage';
+import { DEFAULTS, LIMITS } from '../app.config';
 
 export const updateStreakAndSuccess = async (todayIntake, dailyGoal) => {
   try {
@@ -12,7 +13,7 @@ export const updateStreakAndSuccess = async (todayIntake, dailyGoal) => {
       // New day - check yesterday's success
       if (lastDate) {
         const yesterdayIntake = parseFloat(await getStorageItem(`intake_${lastDate}`, '0'));
-        const yesterdayGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10'));
+        const yesterdayGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams)));
 
         if (yesterdayIntake <= yesterdayGoal) {
           // Yesterday was successful - continue streak
@@ -68,7 +69,7 @@ export const updateStreakAndSuccess = async (todayIntake, dailyGoal) => {
   }
 };
 
-const FREEZES_PER_MONTH = 2;
+const FREEZES_PER_MONTH = LIMITS.freezesPerMonth;
 
 function monthKeyFromDateString(dateStr) {
   const d = new Date(dateStr);
@@ -87,7 +88,7 @@ export const getStreak = async () => {
     const today = new Date();
     let streak = 0;
     let currentDate = new Date(today);
-    const dailyGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10'));
+    const dailyGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams)));
     let foundFirstSuccess = false;
 
     let freezeDates = [];
@@ -230,7 +231,7 @@ export const releaseFreezeForDate = async (dateKey) => {
 /** Returns all-time count of days under limit, computed from actual intake/entries data (matches calendar). */
 export const getSuccessDays = async () => {
   try {
-    const dailyGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10'));
+    const dailyGoal = parseFloat(await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams)));
     const allKeys = await AsyncStorage.getAllKeys();
     const dateKeys = new Set();
     allKeys.forEach((k) => {

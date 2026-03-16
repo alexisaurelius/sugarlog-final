@@ -15,7 +15,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sugarlog.app"
+      "bundleIdentifier": "com.sugarlog.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.sugarlog.app",

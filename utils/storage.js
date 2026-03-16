@@ -21,8 +21,12 @@ export const STORAGE_KEYS = {
   ONBOARDING_COMPLETED: 'onboardingCompleted', // boolean - has user completed onboarding
   REMINDER_SETUP_COMPLETED: 'reminderSetupCompleted', // boolean - has user completed reminder setup screen
   QUIT_REASONS_SCREEN_SEEN: 'quitReasonsScreenSeen', // boolean - user skipped or saved quit reasons
+  ONBOARDING_NAME_COMPLETED: 'onboardingNameCompleted', // boolean - user completed last onboarding (name) screen
   QUIT_SUGAR_REASONS: 'quitSugarReasons', // JSON array of strings, max 3 - why user wants to reduce sugar
   WEEK_START_DAY: 'weekStartDay', // '0' for Sunday, '1' for Monday
+  USER_NAME: 'userName', // display name for the user
+  REVIEW_COUNTED_DATES: 'reviewCountedDates', // JSON array of "YYYY-MM-DD" that have contributed toward review prompt
+  REVIEW_PROMPT_ATTEMPTS: 'reviewPromptAttempts', // number of times we've called requestReview (cap at 3)
 };
 
 export const getStorageItem = async (key, defaultValue = null) => {

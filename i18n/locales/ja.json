@@ -59,6 +59,7 @@
   "track": {
     "title": "記録",
     "navTitle": "記録",
+    "greeting": "{{name}}さん、こんにちは",
     "subtitle": "摂取量を記録",
     "todaySugarIntake": "今日の摂取量",
     "noEntries": "この日の記録はありません。記録を追加してください。",
@@ -156,6 +157,8 @@
   "settings": {
     "title": "設定",
     "subtitle": "設定を管理",
+    "name": "名前",
+    "yourNamePlaceholder": "お名前",
     "dailyGoal": "1日の目標",
     "current": "現在：",
     "enterNewGoal": "新しい目標を入力",
@@ -201,6 +204,7 @@
     "sendFeedback": "フィードバックを送信",
     "faq": "よくある質問",
     "shareApp": "アプリを共有",
+    "reviewApp": "アプリを評価",
     "emailNotAvailable": "このデバイスではメールが利用できません",
     "appLinkCopied": "アプリリンクがクリップボードにコピーされました！",
     "copyFailed": "クリップボードへのコピーに失敗しました",
@@ -226,7 +230,10 @@
     "manageSubscriptionDesc": "システム設定でサブスクリプションを管理できます。",
     "quitReasonsTitle": "砂糖を減らす理由",
     "quitReasonsDesc": "トラック画面に理由を表示します。ここで編集できます。",
-    "editReasons": "理由を編集"
+    "editReasons": "理由を編集",
+    "restorePurchases": "購入を復元",
+    "restorePurchasesSuccess": "プレミアムを復元しました。サブスクリプションが有効です。",
+    "restorePurchasesNone": "このアカウントでは以前の購入が見つかりませんでした。"
   },
   "onboarding": {
     "welcome": "ようこそ",
@@ -246,6 +253,14 @@
     "achievementsDesc": "健康的な習慣を構築しながら実績を獲得",
     "firstEntryFree": "最初の3つの記録は無料",
     "firstEntryFreeDesc": "最初の3つの記録は無料で開始、プレミアムにアップグレードすると無制限に記録可能"
+  },
+  "nameSetup": {
+    "title": "お名前は？",
+    "subtitle": "Track画面でお名前を表示します。",
+    "yourName": "お名前",
+    "placeholder": "名（ファーストネーム）",
+    "continue": "続ける",
+    "skip": "スキップ"
   },
   "reminderSetup": {
     "title": "リマインダーを設定",

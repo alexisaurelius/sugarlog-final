@@ -15,8 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemeContext } from '../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { STORAGE_KEYS, setStorageItem } from '../utils/storage';
+import { LIMITS } from '../app.config';
 
-const MAX_REASONS = 3;
+const MAX_REASONS = LIMITS.maxQuitReasons;
 
 export default function QuitReasonsScreen({ onComplete, onSkip, initialReasons = [], editMode = false }) {
   const { theme } = useThemeContext();

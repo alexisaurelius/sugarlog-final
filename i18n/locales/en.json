@@ -59,6 +59,7 @@
   "track": {
     "title": "Track",
     "navTitle": "Track",
+    "greeting": "Hi, {{name}}",
     "subtitle": "Log your sugar intake",
     "todaySugarIntake": "Today's Intake",
     "noEntries": "No entries for this day, add some whenever you're ready.",
@@ -156,6 +157,8 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Manage your preferences",
+    "name": "Name",
+    "yourNamePlaceholder": "Your Name",
     "dailyGoal": "Daily Goal",
     "current": "Current:",
     "enterNewGoal": "Enter new goal in",
@@ -201,6 +204,7 @@
     "sendFeedback": "Send Feedback",
     "faq": "FAQ",
     "shareApp": "Share the App",
+    "reviewApp": "Review the App",
     "emailNotAvailable": "Email is not available on this device",
     "appLinkCopied": "App link copied to clipboard!",
     "copyFailed": "Failed to copy to clipboard",
@@ -226,7 +230,10 @@
     "manageSubscriptionDesc": "Manage your subscription in system settings.",
     "quitReasonsTitle": "Why I'm reducing sugar",
     "quitReasonsDesc": "Your reasons are shown on the Track screen. Edit them here.",
-    "editReasons": "Edit reasons"
+    "editReasons": "Edit reasons",
+    "restorePurchases": "Restore purchases",
+    "restorePurchasesSuccess": "Premium restored. Your subscription is active.",
+    "restorePurchasesNone": "No previous purchases found for this account."
   },
   "onboarding": {
     "welcome": "Welcome to",
@@ -246,6 +253,14 @@
     "achievementsDesc": "Earn achievements as you build healthier habits",
     "firstEntryFree": "First 3 entries are free",
     "firstEntryFreeDesc": "Start tracking with your first 3 entries free, upgrade to Premium for unlimited entries"
+  },
+  "nameSetup": {
+    "title": "What is your name?",
+    "subtitle": "We'll use this to personalize your Track screen.",
+    "yourName": "Your name",
+    "placeholder": "Your First Name",
+    "continue": "Continue",
+    "skip": "Skip"
   },
   "reminderSetup": {
     "title": "Set Up Reminders",

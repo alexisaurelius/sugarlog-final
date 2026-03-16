@@ -48,7 +48,7 @@ export default function OnboardingScreen({ onComplete }) {
   ];
 
   const handleUpgradePress = async () => {
-    const subscribed = await isSubscribed();
+    const subscribed = await isSubscribed(true);
     if (subscribed) {
       const url = Platform.OS === 'ios'
         ? 'https://apps.apple.com/account/subscriptions'
@@ -60,7 +60,8 @@ export default function OnboardingScreen({ onComplete }) {
         console.warn('Open subscription settings:', e?.message || e);
       }
     } else {
-      await presentPaywall();
+      const purchased = await presentPaywall();
+      if (purchased) onComplete();
     }
   };
 

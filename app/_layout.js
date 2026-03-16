@@ -3,14 +3,16 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { initializeNotifications } from '../utils/notifications';
-import { configurePurchases } from '../utils/purchases';
+import { LAUNCH } from '../app.config';
 import { ThemeProvider, useThemeContext } from '../utils/ThemeContext';
+import { LanguageProvider } from '../contexts/LanguageContext';
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
 import '../i18n/config';
 import OnboardingScreen from './onboarding';
 import ReminderSetupScreen from './reminder-setup';
 import GoalSetupScreen from './goal-setup';
 import QuitReasonsScreen from './quit-reasons';
+import NameSetupScreen from './name-setup';
 
 function RootLayoutContent() {
   const { theme } = useThemeContext();
@@ -18,12 +20,14 @@ function RootLayoutContent() {
   const [showReminderSetup, setShowReminderSetup] = useState(false);
   const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [showQuitReasons, setShowQuitReasons] = useState(false);
+  const [showNameSetup, setShowNameSetup] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
 
   useEffect(() => {
-    initializeNotifications();
-    configurePurchases();
     checkOnboardingStatus();
+    // Defer notifications init to avoid launch crash on iOS 26+ (TurboModule void method exceptions)
+    const t = setTimeout(initializeNotifications, LAUNCH.notificationInitDelayMs);
+    return () => clearTimeout(t);
   }, []);
 
   const checkOnboardingStatus = async () => {
@@ -32,6 +36,7 @@ function RootLayoutContent() {
       const reminderSetupCompleted = await getStorageItem(STORAGE_KEYS.REMINDER_SETUP_COMPLETED, 'false');
       const goalSet = await getStorageItem(STORAGE_KEYS.GOAL_SET, 'false');
       const quitReasonsSeen = await getStorageItem(STORAGE_KEYS.QUIT_REASONS_SCREEN_SEEN, 'false');
+      const nameCompleted = await getStorageItem(STORAGE_KEYS.ONBOARDING_NAME_COMPLETED, 'false');
       setShowOnboarding(completed !== 'true');
       setShowReminderSetup(completed === 'true' && reminderSetupCompleted !== 'true');
       setShowGoalSetup(completed === 'true' && reminderSetupCompleted === 'true' && goalSet !== 'true');
@@ -40,6 +45,13 @@ function RootLayoutContent() {
         reminderSetupCompleted === 'true' &&
         goalSet === 'true' &&
         quitReasonsSeen !== 'true'
+      );
+      setShowNameSetup(
+        completed === 'true' &&
+        reminderSetupCompleted === 'true' &&
+        goalSet === 'true' &&
+        quitReasonsSeen === 'true' &&
+        nameCompleted !== 'true'
       );
       setIsCheckingOnboarding(false);
     } catch (error) {
@@ -106,8 +118,17 @@ function RootLayoutContent() {
   if (showQuitReasons) {
     return (
       <QuitReasonsScreen
-        onComplete={() => setShowQuitReasons(false)}
-        onSkip={() => setShowQuitReasons(false)}
+        onComplete={() => checkOnboardingStatus()}
+        onSkip={() => checkOnboardingStatus()}
+      />
+    );
+  }
+
+  if (showNameSetup) {
+    return (
+      <NameSetupScreen
+        onComplete={() => checkOnboardingStatus()}
+        onSkip={() => checkOnboardingStatus()}
       />
     );
   }
@@ -131,8 +152,10 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <RootLayoutContent />
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider>
+        <RootLayoutContent />
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

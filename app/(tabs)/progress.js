@@ -20,6 +20,7 @@ import { ACHIEVEMENTS, checkAchievements } from '../../utils/achievements';
 import { getDaysInMonth, getFirstDayOfMonth, formatDateKey, getMonthName } from '../../utils/calendar';
 import { useTheme } from '../../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { DEFAULTS } from '../../app.config';
 
 export default function ProgressScreen() {
   const theme = useTheme();
@@ -31,7 +32,6 @@ export default function ProgressScreen() {
   const [successDays, setSuccessDays] = useState(0);
   const [trackingDays, setTrackingDays] = useState(0);
   const [trackingStreak, setTrackingStreak] = useState(0);
-  const [dailyGoal, setDailyGoal] = useState(10);
   const [unitSystem, setUnitSystem] = useState(UNIT_SYSTEMS.METRIC);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [calendarData, setCalendarData] = useState({});
@@ -42,11 +42,7 @@ export default function ProgressScreen() {
   const [freezeUsage, setFreezeUsage] = useState({ used: 0, limit: 2 });
   const [freezeStatusForSelectedDay, setFreezeStatusForSelectedDay] = useState(null);
   const [weekStartDay, setWeekStartDay] = useState(0); // 0 = Sunday, 1 = Monday
-
-  useEffect(() => {
-    loadData();
-    loadWeekStartDay();
-  }, []);
+  const [dailyGoal, setDailyGoal] = useState(DEFAULTS.dailyGoalGrams);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -58,7 +54,7 @@ export default function ProgressScreen() {
     React.useCallback(() => {
       loadData();
       loadCalendarData();
-    }, [])
+    }, [currentMonth, dailyGoal])
   );
 
   useEffect(() => {
@@ -79,7 +75,7 @@ export default function ProgressScreen() {
     const totalTrackingDays = await getTotalTrackingDays();
     const trackingStreak = await getTrackingStreak();
     const freeze = await getFreezeUsageForMonth();
-    const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, '10');
+    const goal = await getStorageItem(STORAGE_KEYS.DAILY_GOAL, String(DEFAULTS.dailyGoalGrams));
     const unit = await getStorageItem(STORAGE_KEYS.UNIT_SYSTEM, UNIT_SYSTEMS.METRIC);
     const achievements = await getStorageItem(STORAGE_KEYS.ACHIEVEMENTS, '[]');
 
@@ -103,11 +99,12 @@ export default function ProgressScreen() {
       trackingStreak
     );
     if (newOnes.length > 0) {
-      setNewAchievements(newOnes);
-      // Save new achievements
+      // Save new achievements first so a concurrent loadData doesn't overwrite
       const updated = [...parsedAchievements, ...newOnes.map(a => a.id)];
       await setStorageItem(STORAGE_KEYS.ACHIEVEMENTS, JSON.stringify(updated));
       setUnlockedAchievements(updated);
+      // Defer so the celebration modal shows after any competing loadData has finished (avoids race where second loadData doesn't set newAchievements)
+      setTimeout(() => setNewAchievements(newOnes), 100);
     }
   };
 

@@ -58,6 +58,7 @@
   "track": {
     "title": "记录",
     "navTitle": "记录",
+    "greeting": "你好，{{name}}",
     "subtitle": "记录您的糖分摄入",
     "todaySugarIntake": "今日摄入量",
     "noEntries": "今天还没有记录。请添加记录。",
@@ -155,6 +156,8 @@
   "settings": {
     "title": "设置",
     "subtitle": "管理您的偏好设置",
+    "name": "姓名",
+    "yourNamePlaceholder": "您的姓名",
     "dailyGoal": "每日目标",
     "current": "当前：",
     "enterNewGoal": "输入新目标",
@@ -200,6 +203,7 @@
     "sendFeedback": "发送反馈",
     "faq": "常见问题",
     "shareApp": "分享应用",
+    "reviewApp": "评价应用",
     "emailNotAvailable": "此设备上无法使用邮件",
     "appLinkCopied": "应用链接已复制到剪贴板！",
     "copyFailed": "复制到剪贴板失败",
@@ -225,7 +229,10 @@
     "manageSubscriptionDesc": "可在系统设置中管理订阅。",
     "quitReasonsTitle": "我为什么减糖",
     "quitReasonsDesc": "您的理由会显示在追踪页面上。可在此编辑。",
-    "editReasons": "编辑理由"
+    "editReasons": "编辑理由",
+    "restorePurchases": "恢复购买",
+    "restorePurchasesSuccess": "已恢复高级版，您的订阅已生效。",
+    "restorePurchasesNone": "此账户下未找到之前的购买记录。"
   },
   "onboarding": {
     "welcome": "欢迎使用",
@@ -245,6 +252,14 @@
     "achievementsDesc": "在建立更健康习惯的同时获得成就",
     "firstEntryFree": "前3次记录免费",
     "firstEntryFreeDesc": "前3次记录免费开始，升级到高级版可享受无限记录"
+  },
+  "nameSetup": {
+    "title": "您叫什么名字？",
+    "subtitle": "我们会在「记录」页面显示您的名字。",
+    "yourName": "您的姓名",
+    "placeholder": "您的名",
+    "continue": "继续",
+    "skip": "跳过"
   },
   "reminderSetup": {
     "title": "设置提醒",
