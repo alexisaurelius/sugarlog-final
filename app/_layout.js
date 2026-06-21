@@ -7,12 +7,14 @@ import { LAUNCH } from '../app.config';
 import { ThemeProvider, useThemeContext } from '../utils/ThemeContext';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { getStorageItem, setStorageItem, STORAGE_KEYS } from '../utils/storage';
+import { warmUpPurchases } from '../utils/purchases';
 import '../i18n/config';
 import OnboardingScreen from './onboarding';
 import ReminderSetupScreen from './reminder-setup';
 import GoalSetupScreen from './goal-setup';
 import QuitReasonsScreen from './quit-reasons';
 import NameSetupScreen from './name-setup';
+import PremiumOnboardingScreen from './premium-onboarding';
 
 function RootLayoutContent() {
   const { theme } = useThemeContext();
@@ -21,10 +23,12 @@ function RootLayoutContent() {
   const [showGoalSetup, setShowGoalSetup] = useState(false);
   const [showQuitReasons, setShowQuitReasons] = useState(false);
   const [showNameSetup, setShowNameSetup] = useState(false);
+  const [showPremiumOnboarding, setShowPremiumOnboarding] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
 
   useEffect(() => {
     checkOnboardingStatus();
+    warmUpPurchases();
     // Defer notifications init to avoid launch crash on iOS 26+ (TurboModule void method exceptions)
     const t = setTimeout(initializeNotifications, LAUNCH.notificationInitDelayMs);
     return () => clearTimeout(t);
@@ -32,11 +36,31 @@ function RootLayoutContent() {
 
   const checkOnboardingStatus = async () => {
     try {
+      let flowVersion = await getStorageItem(STORAGE_KEYS.ONBOARDING_FLOW_VERSION, '1');
       const completed = await getStorageItem(STORAGE_KEYS.ONBOARDING_COMPLETED, 'false');
       const reminderSetupCompleted = await getStorageItem(STORAGE_KEYS.REMINDER_SETUP_COMPLETED, 'false');
       const goalSet = await getStorageItem(STORAGE_KEYS.GOAL_SET, 'false');
       const quitReasonsSeen = await getStorageItem(STORAGE_KEYS.QUIT_REASONS_SCREEN_SEEN, 'false');
       const nameCompleted = await getStorageItem(STORAGE_KEYS.ONBOARDING_NAME_COMPLETED, 'false');
+      let premiumCompleted = await getStorageItem(STORAGE_KEYS.ONBOARDING_PREMIUM_COMPLETED, 'false');
+
+      // Skip premium step for users who finished onboarding before it was added
+      if (flowVersion === '1' && nameCompleted === 'true') {
+        await setStorageItem(STORAGE_KEYS.ONBOARDING_PREMIUM_COMPLETED, 'true');
+        premiumCompleted = 'true';
+        await setStorageItem(STORAGE_KEYS.ONBOARDING_FLOW_VERSION, '2');
+        flowVersion = '2';
+      } else if (flowVersion === '1') {
+        await setStorageItem(STORAGE_KEYS.ONBOARDING_FLOW_VERSION, '2');
+        flowVersion = '2';
+      }
+
+      const baseOnboardingDone =
+        completed === 'true' &&
+        reminderSetupCompleted === 'true' &&
+        goalSet === 'true' &&
+        quitReasonsSeen === 'true';
+
       setShowOnboarding(completed !== 'true');
       setShowReminderSetup(completed === 'true' && reminderSetupCompleted !== 'true');
       setShowGoalSetup(completed === 'true' && reminderSetupCompleted === 'true' && goalSet !== 'true');
@@ -46,12 +70,9 @@ function RootLayoutContent() {
         goalSet === 'true' &&
         quitReasonsSeen !== 'true'
       );
-      setShowNameSetup(
-        completed === 'true' &&
-        reminderSetupCompleted === 'true' &&
-        goalSet === 'true' &&
-        quitReasonsSeen === 'true' &&
-        nameCompleted !== 'true'
+      setShowNameSetup(baseOnboardingDone && nameCompleted !== 'true');
+      setShowPremiumOnboarding(
+        baseOnboardingDone && nameCompleted === 'true' && premiumCompleted !== 'true'
       );
       setIsCheckingOnboarding(false);
     } catch (error) {
@@ -129,6 +150,21 @@ function RootLayoutContent() {
       <NameSetupScreen
         onComplete={() => checkOnboardingStatus()}
         onSkip={() => checkOnboardingStatus()}
+      />
+    );
+  }
+
+  if (showPremiumOnboarding) {
+    return (
+      <PremiumOnboardingScreen
+        onComplete={async () => {
+          try {
+            await setStorageItem(STORAGE_KEYS.ONBOARDING_PREMIUM_COMPLETED, 'true');
+            await checkOnboardingStatus();
+          } catch (error) {
+            console.error('Error saving premium onboarding status:', error);
+          }
+        }}
       />
     );
   }

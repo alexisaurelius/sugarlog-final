@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useScrollToTop } from '@react-navigation/native';
 import { STORAGE_KEYS, getStorageItem, setStorageItem } from '../../utils/storage';
-import { UNIT_SYSTEMS, COMMON_ITEMS, formatValue, getUnitLabel, convertToMetric } from '../../utils/units';
+import { UNIT_SYSTEMS, formatValue, getUnitLabel } from '../../utils/units';
 import { getLocalizedFoodItems } from '../../utils/unitsLocalized';
 import { updateStreakAndSuccess, releaseFreezeForDate, getDaysWithEntriesSet } from '../../utils/stats';
 import { isSubscribed, presentPaywall } from '../../utils/purchases';
@@ -26,6 +26,43 @@ import { maybePromptReview } from '../../utils/appReview';
 import { useTheme } from '../../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { DEFAULTS, LIMITS, SUBSCRIPTION } from '../../app.config';
+
+function trackLocaleTag(i18n) {
+  const lang = i18n.language;
+  if (lang === 'zh' || (typeof lang === 'string' && lang.startsWith('zh'))) return 'zh-CN';
+  if (lang === 'ja' || (typeof lang === 'string' && lang.startsWith('ja'))) return 'ja-JP';
+  if (typeof lang === 'string' && lang.includes('-')) return lang;
+  return 'en-US';
+}
+
+function formatEntryLocalTime(iso, i18n) {
+  const d = new Date(iso || Date.now());
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString(trackLocaleTag(i18n), { hour: 'numeric', minute: '2-digit' });
+}
+
+function getEntryDisplayAmountValue(entry, unitSystem) {
+  const grams = entry.amount ?? entry.sugarGrams ?? 0;
+  let displayAmount = entry.displayAmount;
+  if (displayAmount == null || Number.isNaN(Number(displayAmount))) {
+    displayAmount = unitSystem === UNIT_SYSTEMS.IMPERIAL ? grams * 0.035274 : grams;
+  }
+  return Number(displayAmount) || 0;
+}
+
+function parseAmountInput(value) {
+  const normalized = String(value).trim().replace(',', '.');
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return NaN;
+  return Number(normalized);
+}
+
+function entryHasDisplayName(entry, t) {
+  const n = (entry.itemName ?? entry.name ?? '').trim();
+  if (!n) return false;
+  if (n === 'Custom') return false;
+  if (n === t('track.addCustom')) return false;
+  return true;
+}
 
 export default function TrackScreen() {
   const theme = useTheme();
@@ -133,7 +170,7 @@ export default function TrackScreen() {
 
   const addCustomQuickAddItem = async () => {
     const name = newCustomName.trim();
-    const amount = parseFloat(newCustomAmount);
+    const amount = parseAmountInput(newCustomAmount);
     if (!name) {
       Alert.alert(t('track.invalidInput'), t('track.enterFoodName'));
       return;
@@ -160,7 +197,7 @@ export default function TrackScreen() {
 
   const handleSetGoal = async () => {
     const goalValue = parseInt(goalInput);
-    if (isNaN(goalValue) || goalValue <= 0) {
+    if (isNaN(goalValue) || goalValue < 0) {
       Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
       return;
     }
@@ -244,7 +281,7 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
   };
 
   const handleCustomAdd = () => {
-    const amount = parseFloat(customAmount);
+    const amount = parseAmountInput(customAmount);
     if (isNaN(amount) || amount < 0) {
       Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
       return;
@@ -408,7 +445,6 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
   const hasNoEntries = entryHistory.length === 0;
   const shouldHideRemaining = hasNoEntries;
   const percentage = displayGoal > 0 ? (displayIntake / displayGoal) * 100 : 0;
-  const unitLabel = getUnitLabel(unitSystem, t);
 
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => createTrackStyles(theme), [theme]);
@@ -491,24 +527,20 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
           </TouchableOpacity>
         </View>
         {/* Today's Summary */}
-        <TouchableOpacity 
-          style={styles.summaryCard}
-          onPress={() => {
-            if (entryHistory.length > 0) {
-              setShowHistoryModal(true);
-            }
-          }}
-          activeOpacity={entryHistory.length > 0 ? 0.9 : 1}
-          disabled={entryHistory.length === 0}
-        >
-          <View style={styles.summaryTitleRow}>
+        <View style={styles.summaryCard}>
+          <TouchableOpacity
+            style={styles.summaryTitleRow}
+            onPress={() => entryHistory.length > 0 && setShowHistoryModal(true)}
+            activeOpacity={entryHistory.length > 0 ? 0.7 : 1}
+            disabled={entryHistory.length === 0}
+          >
             <Text style={styles.summaryTitle}>{t('track.todaySugarIntake')}</Text>
-            <Ionicons 
-              name="pencil" 
-              size={20} 
-              color={entryHistory.length === 0 ? c.disabled : c.primary} 
+            <Ionicons
+              name="pencil"
+              size={20}
+              color={entryHistory.length === 0 ? c.disabled : c.primary}
             />
-          </View>
+          </TouchableOpacity>
           {selectedDate.toDateString() === new Date().toDateString() &&
             quitReasons.length > 0 && (
               <Text style={[styles.motivationReason, { color: c.primary }]} numberOfLines={2}>
@@ -520,7 +552,7 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
           ) : (
             <>
               <Text style={styles.summaryAmount}>
-                {Math.round(displayIntake)}{unitLabel} / {Math.round(displayGoal)}{unitLabel}
+                {formatValue(displayIntake, unitSystem, 1, t)} / {formatValue(displayGoal, unitSystem, 1, t)}
               </Text>
               <View style={styles.progressBar}>
                 <View
@@ -533,6 +565,43 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
                   ]}
                 />
               </View>
+              <View style={[styles.summaryEntriesList, { borderTopColor: c.border }]}>
+                {entryHistory.map((entry, index) => {
+                  const amountStr = formatValue(
+                    getEntryDisplayAmountValue(entry, unitSystem),
+                    unitSystem,
+                    1,
+                    t
+                  );
+                  const timeStr = formatEntryLocalTime(entry.timestamp, i18n);
+                  const named = entryHasDisplayName(entry, t);
+                  const foodName = entry.itemName ?? entry.name ?? '';
+                  const line = named
+                    ? t('track.intakeSummaryLineWithName', {
+                        index: index + 1,
+                        name: foodName,
+                        amount: amountStr,
+                        time: timeStr,
+                      })
+                    : t('track.intakeSummaryLineNoName', {
+                        index: index + 1,
+                        amount: amountStr,
+                        time: timeStr,
+                      });
+                  return (
+                    <View
+                      key={entry.id}
+                      style={[
+                        styles.summaryEntryRow,
+                        index > 0 && styles.summaryEntryRowDivider,
+                        index > 0 && { borderTopColor: c.border },
+                      ]}
+                    >
+                      <Text style={styles.summaryEntryText}>{line}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </>
           )}
           {!shouldHideRemaining && (
@@ -543,11 +612,11 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
               ]}
             >
             {remaining >= 0
-              ? `${Math.round(remaining)}${unitLabel} ${t('common.remaining')}`
-              : `${Math.round(Math.abs(remaining))}${unitLabel} ${t('common.over')}`}
+              ? `${formatValue(remaining, unitSystem, 1, t)} ${t('common.remaining')}`
+              : `${formatValue(Math.abs(remaining), unitSystem, 1, t)} ${t('common.over')}`}
             </Text>
           )}
-        </TouchableOpacity>
+        </View>
 
         {/* Custom Amount */}
         <View style={styles.section}>
@@ -787,7 +856,7 @@ const MAX_GOAL_GRAMS = LIMITS.maxDailyGoalGrams;
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonPrimary]}
                   onPress={() => {
-                    const newAmount = parseFloat(editAmount);
+                    const newAmount = parseAmountInput(editAmount);
                     if (!isNaN(newAmount) && newAmount > 0 && editingEntry) {
                       editEntry(editingEntry.id, newAmount);
                       setEditingEntry(null);
@@ -1053,17 +1122,21 @@ function createTrackStyles(theme) {
     headerSubtitle: { fontSize: 16, color: c.headerText, opacity: 0.9 },
     content: { padding: 20 },
     summaryCard: {
-      backgroundColor: c.surface, borderRadius: 15, padding: 20, marginBottom: 25, alignItems: 'center',
+      backgroundColor: c.surface, borderRadius: 15, padding: 20, marginBottom: 25, alignItems: 'stretch',
       shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
     },
     summaryTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10 },
+    summaryEntriesList: { width: '100%', marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth },
+    summaryEntryRow: { paddingVertical: 8 },
+    summaryEntryRowDivider: { borderTopWidth: StyleSheet.hairlineWidth },
+    summaryEntryText: { fontSize: 16, color: c.textSecondary, lineHeight: 22 },
     summaryTitle: { fontSize: 18, color: c.textSecondary },
     motivationReason: { fontSize: 18, fontStyle: 'italic', marginBottom: 8, textAlign: 'center', width: '100%' },
-    summaryAmount: { fontSize: 32, fontWeight: 'bold', color: c.text, marginBottom: 15 },
-    summaryEmptyText: { textAlign: 'center', color: c.textMuted, fontSize: 16, marginTop: 4, marginBottom: 15 },
-    progressBar: { width: '100%', height: 20, backgroundColor: c.border, borderRadius: 10, overflow: 'hidden', marginBottom: 10 },
+    summaryAmount: { fontSize: 32, fontWeight: 'bold', color: c.text, marginBottom: 15, alignSelf: 'center', textAlign: 'center' },
+    summaryEmptyText: { textAlign: 'center', color: c.textMuted, fontSize: 16, marginTop: 4, marginBottom: 15, alignSelf: 'center' },
+    progressBar: { width: '100%', height: 20, backgroundColor: c.border, borderRadius: 10, overflow: 'hidden', marginBottom: 10, alignSelf: 'center' },
     progressFill: { height: '100%', borderRadius: 10 },
-    remainingText: { fontSize: 16, fontWeight: '500' },
+    remainingText: { fontSize: 16, fontWeight: '500', alignSelf: 'center', textAlign: 'center', marginTop: 4 },
     section: { marginBottom: 25 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
     sectionTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },

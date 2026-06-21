@@ -8,7 +8,7 @@
 export const APP = {
   name: 'SugarLog',
   slug: 'sugarlog',
-  version: '1.1.0',
+  version: '1.2.0',
   bundleId: {
     ios: 'com.sugarlog.app',
     android: 'com.sugarlog.app',
@@ -35,7 +35,7 @@ export const LIMITS = {
 
 // ─── Subscription (free tier) ──────────────────────────────────────────────
 export const SUBSCRIPTION = {
-  freeDayLimit: 3, // days with entries before paywall
+  freeDayLimit: 2, // distinct days with at least one entry; 3rd new day triggers paywall
   entitlementId: 'pro', // primary; also accept 'premium' (RevenueCat dashboard may use either)
   entitlementIds: ['pro', 'premium'],
 };

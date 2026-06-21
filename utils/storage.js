@@ -21,7 +21,9 @@ export const STORAGE_KEYS = {
   ONBOARDING_COMPLETED: 'onboardingCompleted', // boolean - has user completed onboarding
   REMINDER_SETUP_COMPLETED: 'reminderSetupCompleted', // boolean - has user completed reminder setup screen
   QUIT_REASONS_SCREEN_SEEN: 'quitReasonsScreenSeen', // boolean - user skipped or saved quit reasons
-  ONBOARDING_NAME_COMPLETED: 'onboardingNameCompleted', // boolean - user completed last onboarding (name) screen
+  ONBOARDING_NAME_COMPLETED: 'onboardingNameCompleted', // boolean - user completed name setup screen
+  ONBOARDING_PREMIUM_COMPLETED: 'onboardingPremiumCompleted', // boolean - user completed premium onboarding (paywall shown)
+  ONBOARDING_FLOW_VERSION: 'onboardingFlowVersion', // '2' = includes premium step after name
   QUIT_SUGAR_REASONS: 'quitSugarReasons', // JSON array of strings, max 3 - why user wants to reduce sugar
   WEEK_START_DAY: 'weekStartDay', // '0' for Sunday, '1' for Monday
   USER_NAME: 'userName', // display name for the user

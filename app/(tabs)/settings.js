@@ -160,7 +160,7 @@ export default function SettingsScreen() {
 
   const handleUpdateGoal = async () => {
     const goalValue = parseFloat(goalInput);
-    if (isNaN(goalValue) || goalValue <= 0) {
+    if (isNaN(goalValue) || goalValue < 0) {
       Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
       return;
     }
@@ -322,6 +322,8 @@ export default function SettingsScreen() {
               await setStorageItem(STORAGE_KEYS.GOAL_SET, 'false');
               await setStorageItem(STORAGE_KEYS.QUIT_REASONS_SCREEN_SEEN, 'false');
               await setStorageItem(STORAGE_KEYS.ONBOARDING_NAME_COMPLETED, 'false');
+              await setStorageItem(STORAGE_KEYS.ONBOARDING_PREMIUM_COMPLETED, 'false');
+              await setStorageItem(STORAGE_KEYS.ONBOARDING_FLOW_VERSION, '2');
               Alert.alert(
                 t('common.success'),
                 t('settings.resetOnboardingSuccess') || 'Onboarding will be shown on next app restart',

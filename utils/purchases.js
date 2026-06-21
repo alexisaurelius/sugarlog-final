@@ -1,6 +1,6 @@
 /**
  * RevenueCat subscriptions and paywall.
- * Free tier: 3 distinct days with entries; on 4th day we show paywall.
+ * Free tier: 2 distinct days with entries; on 3rd new day we show paywall.
  */
 import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL } from 'react-native-purchases';
@@ -8,20 +8,81 @@ import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { REVENUECAT, SUBSCRIPTION } from '../app.config';
 
 let isConfigured = false;
+let configurePromise = null;
+let warmUpPromise = null;
+let pendingPaywallPromise = null;
 
 export async function configurePurchases() {
   if (isConfigured) return;
-  try {
-    Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
-    if (Platform.OS === 'ios') {
-      Purchases.configure({ apiKey: REVENUECAT.appleApiKey });
-    } else if (Platform.OS === 'android' && REVENUECAT.googleApiKey) {
-      Purchases.configure({ apiKey: REVENUECAT.googleApiKey });
-    }
-    isConfigured = true;
-  } catch (e) {
-    console.warn('RevenueCat configure:', e?.message || e);
+  if (configurePromise) {
+    await configurePromise;
+    return;
   }
+
+  configurePromise = (async () => {
+    try {
+      Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+      if (Platform.OS === 'ios') {
+        Purchases.configure({ apiKey: REVENUECAT.appleApiKey });
+      } else if (Platform.OS === 'android' && REVENUECAT.googleApiKey) {
+        Purchases.configure({ apiKey: REVENUECAT.googleApiKey });
+      }
+      isConfigured = true;
+    } catch (e) {
+      console.warn('RevenueCat configure:', e?.message || e);
+      throw e;
+    } finally {
+      configurePromise = null;
+    }
+  })();
+
+  await configurePromise;
+}
+
+/**
+ * Configure RevenueCat and prefetch offerings so the paywall has products ready.
+ * Call early in app launch and when the premium onboarding screen mounts.
+ */
+export async function warmUpPurchases() {
+  if (Platform.OS === 'web') return;
+  if (warmUpPromise) {
+    await warmUpPromise;
+    return;
+  }
+
+  warmUpPromise = (async () => {
+    try {
+      await configurePurchases();
+      await fetchCurrentOffering();
+    } catch (e) {
+      console.warn('RevenueCat warmUp:', e?.message || e);
+    } finally {
+      warmUpPromise = null;
+    }
+  })();
+
+  await warmUpPromise;
+}
+
+async function fetchCurrentOffering(maxAttempts = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const offerings = await Purchases.getOfferings();
+      if (offerings?.current) {
+        return offerings.current;
+      }
+      lastError = new Error('No current offering configured in RevenueCat');
+    } catch (e) {
+      lastError = e;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -89,21 +150,34 @@ export async function restorePurchases() {
  * Present RevenueCat paywall. Returns true if user purchased or restored.
  */
 export async function presentPaywall() {
-  try {
-    await configurePurchases();
-    const result = await RevenueCatUI.presentPaywall();
-    switch (result) {
-      case PAYWALL_RESULT.PURCHASED:
-      case PAYWALL_RESULT.RESTORED:
-        return true;
-      case PAYWALL_RESULT.CANCELLED:
-      case PAYWALL_RESULT.NOT_PRESENTED:
-      case PAYWALL_RESULT.ERROR:
-      default:
-        return false;
-    }
-  } catch (e) {
-    console.warn('RevenueCat presentPaywall:', e?.message || e);
-    return false;
+  if (Platform.OS === 'web') return false;
+
+  if (pendingPaywallPromise) {
+    return pendingPaywallPromise;
   }
+
+  pendingPaywallPromise = (async () => {
+    try {
+      await warmUpPurchases();
+      const offering = await fetchCurrentOffering();
+      const result = await RevenueCatUI.presentPaywall({ offering });
+      switch (result) {
+        case PAYWALL_RESULT.PURCHASED:
+        case PAYWALL_RESULT.RESTORED:
+          return true;
+        case PAYWALL_RESULT.CANCELLED:
+        case PAYWALL_RESULT.NOT_PRESENTED:
+        case PAYWALL_RESULT.ERROR:
+        default:
+          return false;
+      }
+    } catch (e) {
+      console.warn('RevenueCat presentPaywall:', e?.message || e);
+      return false;
+    } finally {
+      pendingPaywallPromise = null;
+    }
+  })();
+
+  return pendingPaywallPromise;
 }

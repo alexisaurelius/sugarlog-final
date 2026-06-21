@@ -28,7 +28,7 @@ export default function GoalSetupScreen({ onComplete }) {
 
   const handleSetGoal = async () => {
     const goalValue = parseInt(goalInput, 10);
-    if (isNaN(goalValue) || goalValue <= 0) {
+    if (isNaN(goalValue) || goalValue < 0) {
       Alert.alert(t('track.invalidInput'), t('track.enterValidNumber'));
       return;
     }

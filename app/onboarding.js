@@ -5,14 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeContext } from '../utils/ThemeContext';
 import { useTranslation } from 'react-i18next';
-import { isSubscribed, presentPaywall } from '../utils/purchases';
+
+const APP_ICON = require('../assets/icon.png');
 
 export default function OnboardingScreen({ onComplete }) {
   const { theme } = useThemeContext();
@@ -41,29 +41,11 @@ export default function OnboardingScreen({ onComplete }) {
       descKey: 'onboarding.achievementsDesc',
     },
     {
-      icon: 'gift-outline',
+      icon: 'journal-outline',
       titleKey: 'onboarding.firstEntryFree',
       descKey: 'onboarding.firstEntryFreeDesc',
     },
   ];
-
-  const handleUpgradePress = async () => {
-    const subscribed = await isSubscribed(true);
-    if (subscribed) {
-      const url = Platform.OS === 'ios'
-        ? 'https://apps.apple.com/account/subscriptions'
-        : 'https://play.google.com/store/account/subscriptions';
-      try {
-        const can = await Linking.canOpenURL(url);
-        if (can) await Linking.openURL(url);
-      } catch (e) {
-        console.warn('Open subscription settings:', e?.message || e);
-      }
-    } else {
-      const purchased = await presentPaywall();
-      if (purchased) onComplete();
-    }
-  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
@@ -71,11 +53,8 @@ export default function OnboardingScreen({ onComplete }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.welcomeText, { color: c.text }]}>
-            {t('onboarding.welcome')}
-          </Text>
+          <Image source={APP_ICON} style={styles.appIcon} accessibilityLabel="SugarLog" />
           <View style={styles.appNameContainer}>
             <Text style={[styles.appName, { color: c.text }]}>
               {t('onboarding.appNamePart1')}
@@ -86,7 +65,6 @@ export default function OnboardingScreen({ onComplete }) {
           </View>
         </View>
 
-        {/* Features List */}
         <View style={styles.featuresContainer}>
           {features.map((feature, index) => (
             <View key={index} style={styles.featureItem}>
@@ -106,17 +84,7 @@ export default function OnboardingScreen({ onComplete }) {
         </View>
       </ScrollView>
 
-      {/* Upgrade now & Continue */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.upgradeButton, { borderColor: c.primary }]}
-          onPress={handleUpgradePress}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.upgradeButtonText, { color: c.primary }]}>
-            {t('onboarding.upgradeNow')}
-          </Text>
-        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.continueButton, { backgroundColor: c.primary }]}
           onPress={onComplete}
@@ -143,10 +111,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginTop: 20,
   },
-  welcomeText: {
-    fontSize: 18,
-    fontWeight: '400',
-    marginBottom: 8,
+  appIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginBottom: 16,
   },
   appNameContainer: {
     flexDirection: 'row',
@@ -187,18 +156,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
     paddingTop: 16,
-    gap: 12,
-  },
-  upgradeButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-  },
-  upgradeButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   continueButton: {
     borderRadius: 12,
